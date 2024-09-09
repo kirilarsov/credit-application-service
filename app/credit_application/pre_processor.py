@@ -5,6 +5,7 @@ import numpy as np
 # third-party imports
 from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import Normalizer
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.impute import KNNImputer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -15,9 +16,7 @@ from sklearn.feature_selection import SelectFromModel
 # application-specific imports
 from app.credit_application import model as cca_model
 
-# Initializations
-scaler = StandardScaler()
-
+enc = OneHotEncoder(handle_unknown='ignore')
 
 def transform_columns_to_float(applications, columns):
     """
@@ -119,7 +118,7 @@ def normalization(x_train, x_test):
     return norm.fit_transform(x_train), norm.transform(x_test)
 
 
-def standardization(x_train, x_test):
+def standardization(x_train, x_test, scaler):
     """
     Apply standardization to the given training and testing data.
 
@@ -174,8 +173,29 @@ def fill_categorical_na_with_most_frequent(applications):
     categorical_data = applications.select_dtypes(include=['object'])
     for column in categorical_data.columns:
         categorical_data = fill_na_with_most_frequent(categorical_data, column)
-    return pd.get_dummies(categorical_data, columns=[0, 3, 4, 5, 6, 8, 9, 11, 12])
+    # return pd.get_dummies(categorical_data, columns=[0, 3, 4, 5, 6, 8, 9, 11, 12])
+    return categorical_data
 
+def encode_categorical_fit(categorical_data):
+    # Sample data
+    # x = categorical_data['0', '3', '4', '5', '6', '8', '9', '11','12']
+
+    # Fitting the encoder to the data
+    return enc.fit(categorical_data)
+
+def encode_categorical_values(categorical_data):
+    # Sample data
+    # x = categorical_data['0', '3', '4', '5', '6', '8', '9', '11','12']
+
+    # Fitting the encoder to the data
+    return pd.DataFrame(enc.transform(categorical_data).toarray())
+
+def encode_test_categorical_values(categorical_data):
+    # Sample data
+    # x = categorical_data['0', '3', '4', '5', '6', '8', '9', '11','12']
+
+    # Fitting the encoder to the data
+    return pd.DataFrame(enc.transform(categorical_data).toarray())
 
 def remove_outliers(applications_ready):
     print("Pre-processor: remove the outliers")
@@ -212,12 +232,12 @@ def train_test_data_split(df, test_size):
 def mark_missing(applications_original):
     print("Pre-processor: mark NaN")
     applications = applications_original.replace("?", np.NaN)
-    applications[15] = applications[15].replace("-", 0)
-    applications[15] = applications[15].replace("+", 1)
+    # applications[15] = applications[15].replace("-", 0)
+    # applications[15] = applications[15].replace("+", 1)
     return applications
 
 
-def request_rescale(x):
+def request_rescale(x, scaler):
     """
     Rescales the input data using a predefined scaler.
 

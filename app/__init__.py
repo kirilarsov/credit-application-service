@@ -1,14 +1,19 @@
 from flask import Flask, request
+from sklearn.preprocessing import StandardScaler
+
 from app.credit_application import model
 from app.credit_application import ca
 import warnings
+# Initializations
+scaler = StandardScaler()
+
 
 warnings.filterwarnings('ignore')
 app = Flask(__name__)
 
 applications_ready = ca.pre_process()
-logistic_regression, trained_data = ca.generate_model(applications_ready)
-score, matrix = ca.model_info(applications_ready)
+logistic_regression, trained_data, x_train, y_train, x_test, y_test = ca.generate_model(applications_ready, scaler)
+score, matrix = ca.model_info(logistic_regression, x_train, y_train, x_test, y_test)
 
 def create_app():
     # Create the Flask application
@@ -22,6 +27,6 @@ def model_info():
 
 @app.route('/creditApplicationRequest', methods=['POST'])
 def credit_application_request():
-    result = ca.predict(request, logistic_regression, trained_data)
+    result = ca.predict(request, logistic_regression, trained_data, scaler, x_train, y_train, x_test)
     response = model.CreditResponseSchema()
     return response.dump(result), 201

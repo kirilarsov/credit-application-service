@@ -51,3 +51,5 @@ S
 Q.idea/sonarlint/securityhotspotstore/1/9/19359a61ae2446b51b549167b014da2fcf265768,e/2/e2212f35b63a1f1addcdc9ab55a8fc987a93a069
 w
 G.idea/sonarlint/issuestore/1/9/19359a61ae2446b51b549167b014da2fcf265768,b/f/bf26e38c6077dc99b98bdb7696e470de283480be
+N
+app/credit_application/test.py,b/2/b2ebfcd67d145e34f13fa9dee32e2e714715ffec
