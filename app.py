@@ -1,24 +1,12 @@
-from flask import Flask, request
-from credit_application import ca, model
-import warnings
-
-warnings.filterwarnings('ignore')
-
-app = Flask(__name__)
-
-logistic_regression, trained_data = ca.generate_model()
-@app.route("/info")
-def model_info():
-    result = ca.model_info()
-    response = model.ModelInfoSchema()
-    return response.dump(result), 200
+from app import create_app
 
 
-@app.route('/creditApplicationRequest', methods=['POST'])
-def credit_application_request():
-    result = ca.predict(request, logistic_regression, trained_data)
-    response = model.CreditResponseSchema()
-    return response.dump(result), 201
+def main():
+    # Initialize the Flask application
+    application_instance = create_app()
+    # Start the Flask application server
+    application_instance.run()
+
 
 if __name__ == "__main__":
-    app.run()
+    main()
