@@ -1,4 +1,4 @@
-from app.credit_application import model as cca_model
+from app.credit_application import domain as cca_model
 
 
 def test_model_info():

@@ -1,91 +1,115 @@
 import numpy as np
 
-from app.credit_application import model as cca_model
+from app.credit_application import domain as cca_model
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
-from pkg_resources import resource_filename
 from app.credit_application import pre_processor
 import pandas as pd
 from sklearn.metrics import accuracy_score
 
-def generate_model(applications_ready, scaler):
+def generate_model(applications_ready):
     """
-    :param applications_ready: List of pre-processed applications
-    :return: Tuple containing the trained LogisticRegression classifier and the applications used for training
+    Generates and trains a logistic regression model for credit applications.
+
+    Args:
+        applications_ready (DataFrame): Preprocessed credit application data
+
+    Returns:
+        tuple: Contains:
+            - trained LogisticRegression model
+            - normalized test features (x_test_normalized)
+            - test labels (y_test)
     """
+    # Remove the outliers
+    applications_ready = pre_processor.remove_outliers(applications_ready)
 
     # Split data for train and test
-    x_train, y_train, x_test, y_test, applications_train = pre_processor.train_test_data_split(applications_ready, 0.33)
-    pre_processor.encode_categorical_fit(applications_ready.drop([15], axis=1))
+    x_train, y_train, x_test, y_test = pre_processor.train_test_data_split(applications_ready, 0.35,15)
+    pre_processor.encode_categorical_fit(x_train)
     x_train_encoded = pre_processor.encode_categorical_values(x_train)
-    x_test_encoded = pre_processor.encode_test_categorical_values(x_test)
+    x_test_encoded = pre_processor.encode_categorical_values(x_test)
 
-    # Remove the outliers
-    # applications_ready = pre_processor.remove_outliers(applications_ready)
+    x_train_normalized, x_test_normalized =pre_processor.normalization(x_train_encoded, x_test_encoded)
 
-
-    x_train1, x_test1 = pre_processor.standardization(x_train_encoded, x_test_encoded, scaler)
     # Instantiate a LogisticRegression classifier with default parameter values
-    model = LogisticRegression()
+    model = LogisticRegression(random_state=42)
     # Fit logreg to the train set
-    model.fit(x_train1, y_train)
-    return model, applications_train, x_train1, y_train, x_test1, y_test
+    model.fit(x_train_normalized, y_train)
+    return model, x_test_normalized, y_test
 
 
 def pre_process():
     """
-    Pre-processes the data by loading it, marking missing values with NaN, imputing missing
-    numeric values, filling categorical missing values with the most frequent value, merging
-    all features into one DataFrame, and removing outliers.
+    Pre-processes the credit application data through multiple steps to prepare it for model training.
 
-    :return: The pre-processed DataFrame.
+    The function performs the following steps:
+    1. Loads the raw data
+    2. Marks missing values with NaN
+    3. Imputes missing numeric values
+    4. Fills missing categorical values
+    5. Merges all features into one DataFrame
+    6. Converts target variable to binary (0/1)
+    7. Removes outliers
+
+    Returns:
+        DataFrame: Fully pre-processed dataset ready for model training
     """
-    # Load data
-    applications_original = load_data()
-    # Based on the above outputs missing values have '?' char, marking them with NaN
+    # Load the raw credit application data from source
+    applications_original = pre_processor.load_data()
+
+    # Convert missing value indicators ('?') to NaN for proper handling
     applications = pre_processor.mark_missing(applications_original)
-    # Before moving to the next step we need to do imputation of all missing values for the numeric features
+
+    # Impute missing values in numeric features using appropriate methods
     imputed_numerical_applications = pre_processor.impute_numeric_features(applications)
-    # Impute canonical features
+
+    # Fill missing values in categorical features with most frequent values
     canonical = pre_processor.fill_categorical_na_with_most_frequent(applications)
 
-    # Merge the numerical, canonical and the target into one df
+    # Combine the processed numerical and categorical features into a single DataFrame
     applications_ready = pd.concat([imputed_numerical_applications, canonical], axis=1)
+
+    # Reset column names to numeric indices (0-15)
+    applications_ready.columns = range(16)
+
+    # Convert target variable from {'-', '+'} to {0, 1} for binary classification
     applications_ready[15] = applications_ready[15].replace("-", 0)
     applications_ready[15] = applications_ready[15].replace("+", 1)
+
+    # Remove statistical outliers to improve model performance
+    applications_ready = pre_processor.remove_outliers(applications_ready)
+
     return applications_ready
 
 
 
 
-def predict(request, model, applications_train, scaler, x_train, y_train, x_test) :
+def predict(request, model) :
     """
-    :param request: The request object containing the data to be predicted.
-    :param model: The trained model used for prediction.
-    :param applications_train: The training data used to train the model.
-    :return: A CreditResponse object representing the predicted credit status.
+    Predicts credit application status using a trained model.
 
-    This method takes in a request object, a trained model, and the training data. It first encodes and serializes the request data. Then, it aligns the columns of the encoded request data
-    * with the columns of the training data. After that, it drops the label column from the aligned request data and rescales it. The rescaled request data is then used to predict the credit
-    * status using the trained model. Finally, it determines the status (approved or declined) based on the prediction and returns a CreditResponse object representing the predicted credit
-    * status.
+    This function processes an incoming credit application request and uses a trained model
+    to predict whether the application should be approved or declined.
+
+    Args:
+        request: Flask request object containing the application data in JSON format
+        model: Trained machine learning model used for prediction
+
+    Returns:
+        CreditResponse: Object containing the predicted application status (APPROVED or DECLINED)
+
+    The function follows these steps:
+    1. Pre-processes the request data to match training data format
+    2. Normalizes/rescales the processed request data
+    3. Makes prediction using the trained model
+    4. Converts prediction (0/1) to application status (DECLINED/APPROVED)
+    5. Returns response with predicted status
     """
     preprocesed_request = pre_process_request_data(request.get_json())
-    # preprocesed_request.columns = preprocesed_request.columns.astype(str)
-
-    print("+++")
-    print(preprocesed_request)
-    # Reindex the columns of the test set aligning with the train set
-    # request_encoded = preprocesed_request.reindex(
-    #     columns=applications_train.columns, fill_value=5
-    # )
-    # # Drop the label from the reindex test set
-    # request_test = request_encoded.drop([15], axis=1).values
 
     # Rescale the request test set
-    rescaled_request_test = scaler.transform(preprocesed_request)
-    # print("+++")
-    # print(rescaled_request_test)
+    rescaled_request_test = pre_processor.request_norm(preprocesed_request)
+
     # Use logreg to predict instances from the test set and store it
     y_pred = model.predict(rescaled_request_test)
     # If the out label is '-' set declined application
@@ -93,63 +117,101 @@ def predict(request, model, applications_train, scaler, x_train, y_train, x_test
     if y_pred[0] == 0:
         status = cca_model.ApplicationStatus.DECLINED
 
-    print("+++")
-    print(y_pred)
-
     return cca_model.CreditResponse(status=status.name)
 
 
-def model_info(logreg, x_train, y_train, x_test, y_test):
+def model_info(logreg, x_test, y_test):
     """
-    Function: model_info
+    Evaluates the performance of a logistic regression model using accuracy score
+    and confusion matrix.
 
-    This function calculates and returns the score and confusion matrix for a logistic regression model.
+    Args:
+        logreg: Trained logistic regression model
+        x_test: Normalized test features
+        y_test: True test labels
 
-    :param applications_ready: The input data for the model.
-    :return: score - The accuracy score of the model
-             matrix - The confusion matrix of the model
+    Returns:
+        tuple: Contains:
+            - score (float): Accuracy score of the model (ratio of correct predictions)
+            - matrix (numpy.ndarray): Confusion matrix showing true/false positives/negatives
+                                    Shape: 2x2 for binary classification
+                                    [[TN, FP],
+                                     [FN, TP]]
+
+    Example:
+        score, matrix = model_info(trained_model, x_test_normalized, y_test)
+        print(f"Model accuracy: {score}")
+        print(f"Confusion matrix:\n{matrix}")
     """
-    # logreg.fit(x_train, y_train)
+    # Generate predictions for test data
     y_pred = logreg.predict(x_test)
-    score = logreg.score(x_test, y_test)
-    # score = accuracy_score(y_test, y_test)
+
+    # Calculate accuracy score (ratio of correct predictions)
+    score = accuracy_score(y_test, y_pred)
+
+    # Generate confusion matrix
     matrix = confusion_matrix(y_test, y_pred)
 
     return score, matrix
 
-
-def load_data():
-    """
-    Loads data from file "crx.data" using the resource_filename method from the "app" package.
-
-    :return: A pandas DataFrame containing the loaded data.
-    """
-    return pd.read_csv(resource_filename("app", "data/crx.data"), header=None)
-
 def pre_process_request_data(request_json):
+    """
+    Pre-processes credit application request data for model prediction.
+
+    Args:
+        request_json: JSON data containing credit application parameters
+
+    Returns:
+        DataFrame: Processed application data ready for prediction
+
+    The function performs the following steps:
+    1. Deserializes JSON data using CreditSchema
+    2. Creates DataFrame from application parameters
+    3. Handles missing values
+    4. Performs type conversion for numeric columns
+    5. Imputes missing values using KNN for numeric features
+    6. Fills missing categorical values
+    7. Encodes categorical variables
+    """
+    # Deserialize JSON data using schema
     r = cca_model.CreditSchema().load(request_json)
-    applications_original = pd.DataFrame(
-        [[r.p0, r.p1, r.p2, r.p3, r.p4, r.p5, r.p6, r.p7, r.p8, r.p9, r.p10, r.p11, r.p12, r.p13, r.p14]])
-    # Based on the above outputs missing values have '?' char, marking them with NaN
+
+    # Create DataFrame from application parameters
+    applications_original = pd.DataFrame([
+        [r.p0, r.p1, r.p2, r.p3, r.p4, r.p5, r.p6, r.p7,
+         r.p8, r.p9, r.p10, r.p11, r.p12, r.p13, r.p14]
+    ])
+
+    # Set column names as integers
     applications_original.columns = applications_original.columns.astype(int)
+
+    # Convert numeric columns to appropriate data types
     applications_original[1] = applications_original[1].astype(float)
     applications_original[2] = applications_original[2].astype(float)
     applications_original[7] = applications_original[7].astype(float)
     applications_original[10] = applications_original[10].astype(int)
-    applications_original[13] = applications_original[13].astype(float)
     applications_original[14] = applications_original[14].astype(int)
 
-
+    # Replace missing value indicators ('?') with NaN
     applications = applications_original.replace("?", np.NaN)
-    # Before moving to the next step we need to do imputation of all missing values for the numeric features
-    data_types_to_impute = ['float64', 'int64']
-    imputed_numerical_applications = pre_processor.impute_with_knn(applications, data_types_to_impute)
-    # Impute canonical features
-    canonical = pre_processor.fill_categorical_na_with_most_frequent(applications)
-    # Merge the numerical, canonical and the target into one df
-    applications_ready = pd.concat([imputed_numerical_applications, canonical], axis=1)
-    canonical_applications = pre_processor.encode_test_categorical_values(applications_ready)
 
-    # Remove the outliers
+    # Define numeric data types for imputation
+    data_types_to_impute = ['float64', 'int64']
+
+    # Impute missing values in numeric features using KNN
+    imputed_numerical_applications = pre_processor.impute_with_knn(
+        applications,
+        data_types_to_impute
+    )
+
+    # Fill missing values in categorical features
+    canonical = pre_processor.fill_categorical_na_with_most_frequent(applications)
+
+    # Combine numerical and categorical features
+    applications_ready = pd.concat([imputed_numerical_applications, canonical], axis=1)
+
+    # Encode categorical variables
+    canonical_applications = pre_processor.encode_categorical_values(applications_ready)
+
     return canonical_applications
 
